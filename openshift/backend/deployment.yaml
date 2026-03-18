@@ -24,7 +24,7 @@ spec:
   source:
     type: Git
     git:
-      uri: https://github.com/YOUR_ORG/mathkids.git   # ← change this
+      uri: https://github.com/phillip-hlapa/mathkids.git   # ← change this
       ref: main
     contextDir: backend      # Only build the backend/ subfolder
   strategy:

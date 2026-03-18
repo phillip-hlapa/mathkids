@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mathkids-mongodb
-  namespace: philliphlapa-dev
+  namespace: mathkids
   labels:
     app: mathkids
     component: mongodb
@@ -20,33 +20,31 @@ spec:
         app: mathkids
         component: mongodb
     spec:
+      # mongo:6.0 runs as UID 999 — fsGroup lets it write to the PVC
+      securityContext:
+        fsGroup: 999
       containers:
         - name: mongodb
-          image: registry.access.redhat.com/rhscl/mongodb-36-rhel7:latest
-          # Use UBI-based MongoDB image which is OpenShift-certified & non-root
+          # MongoDB 6.0 — wire protocol v17, satisfies Mongoose 8 (needs v8+)
+          image: docker.io/mongo:6.0
           ports:
             - containerPort: 27017
           env:
-            - name: MONGODB_USER
+            - name: MONGO_INITDB_ROOT_USERNAME
               valueFrom:
                 secretKeyRef:
                   name: mathkids-secrets
                   key: MONGO_USER
-            - name: MONGODB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mathkids-secrets
-                  key: MONGO_PASSWORD
-            - name: MONGODB_DATABASE
-              value: mathkids
-            - name: MONGODB_ADMIN_PASSWORD
+            - name: MONGO_INITDB_ROOT_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: mathkids-secrets
                   key: MONGO_ADMIN_PASSWORD
+            - name: MONGO_INITDB_DATABASE
+              value: mathkids
           volumeMounts:
             - name: mongodb-data
-              mountPath: /var/lib/mongodb/data
+              mountPath: /data/db
           resources:
             requests:
               memory: "256Mi"
@@ -57,19 +55,28 @@ spec:
           livenessProbe:
             exec:
               command:
-                - mongo
+                - mongosh
                 - --eval
                 - "db.adminCommand('ping')"
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
           readinessProbe:
             exec:
               command:
-                - mongo
+                - mongosh
                 - --eval
                 - "db.adminCommand('ping')"
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 5
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            runAsUser: 999
+            capabilities:
+              drop:
+                - ALL
       volumes:
         - name: mongodb-data
           persistentVolumeClaim:
@@ -79,7 +86,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: mathkids-mongodb
-  namespace: philliphlapa-dev
+  namespace: mathkids
   labels:
     app: mathkids
     component: mongodb
