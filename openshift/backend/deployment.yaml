@@ -80,9 +80,9 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: mathkids-secrets
-                  key: MONGO_PASSWORD
+                  key: MONGO_ADMIN_PASSWORD
             - name: MONGO_URI
-              value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mathkids-mongodb:27017/mathkids"
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mathkids-mongodb:27017/mathkids?authSource=admin"
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
