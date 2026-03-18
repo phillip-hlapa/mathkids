@@ -22,7 +22,7 @@ spec:
     spec:
       containers:
         - name: mongodb
-          image: docker.io/mongo:6.0
+          image: docker.io/bitnami/mongo:latest
           # Use UBI-based MongoDB image which is OpenShift-certified & non-root
           ports:
             - containerPort: 27017
