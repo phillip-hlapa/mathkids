@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mathkids-mongodb
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: mongodb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mathkids
+      component: mongodb
+  strategy:
+    type: Recreate          # PVC can only attach to one pod at a time
+  template:
+    metadata:
+      labels:
+        app: mathkids
+        component: mongodb
+    spec:
+      containers:
+        - name: mongodb
+          image: registry.access.redhat.com/rhscl/mongodb-36-rhel7:latest
+          # Use UBI-based MongoDB image which is OpenShift-certified & non-root
+          ports:
+            - containerPort: 27017
+          env:
+            - name: MONGODB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: MONGO_USER
+            - name: MONGODB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: MONGO_PASSWORD
+            - name: MONGODB_DATABASE
+              value: mathkids
+            - name: MONGODB_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: MONGO_ADMIN_PASSWORD
+          volumeMounts:
+            - name: mongodb-data
+              mountPath: /var/lib/mongodb/data
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - mongo
+                - --eval
+                - "db.adminCommand('ping')"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: mongodb-data
+          persistentVolumeClaim:
+            claimName: mongodb-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mathkids-mongodb
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: mongodb
+spec:
+  selector:
+    app: mathkids
+    component: mongodb
+  ports:
+    - port: 27017
+      targetPort: 27017
+  clusterIP: None    # Headless service — only reachable inside the cluster

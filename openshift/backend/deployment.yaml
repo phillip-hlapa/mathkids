@@ -1,0 +1,139 @@
+# ── ImageStream: where built images land ──────────────────────
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: mathkids-backend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: backend
+spec:
+  lookupPolicy:
+    local: true
+---
+# ── BuildConfig: builds the image from your Git repo ──────────
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: mathkids-backend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: backend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/YOUR_ORG/mathkids.git   # ← change this
+      ref: main
+    contextDir: backend      # Only build the backend/ subfolder
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: mathkids-backend:latest
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+---
+# ── Deployment ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mathkids-backend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mathkids
+      component: backend
+  template:
+    metadata:
+      labels:
+        app: mathkids
+        component: backend
+    spec:
+      containers:
+        - name: backend
+          image: mathkids-backend:latest   # Resolves via ImageStream
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: PORT
+              value: "5000"
+            - name: NODE_ENV
+              value: production
+            - name: MONGO_USER
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: MONGO_USER
+            - name: MONGO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: MONGO_PASSWORD
+            - name: MONGO_URI
+              value: "mongodb://$(MONGO_USER):$(MONGO_PASSWORD)@mathkids-mongodb:27017/mathkids"
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: JWT_SECRET
+            - name: ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mathkids-secrets
+                  key: ADMIN_PASSWORD
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+---
+# ── Service ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mathkids-backend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: backend
+spec:
+  selector:
+    app: mathkids
+    component: backend
+  ports:
+    - port: 5000
+      targetPort: 5000

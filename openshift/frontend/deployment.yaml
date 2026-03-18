@@ -1,0 +1,132 @@
+# ── ImageStream ────────────────────────────────────────────────
+apiVersion: image.openshift.io/v1
+kind: ImageStream
+metadata:
+  name: mathkids-frontend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: frontend
+spec:
+  lookupPolicy:
+    local: true
+---
+# ── BuildConfig ────────────────────────────────────────────────
+apiVersion: build.openshift.io/v1
+kind: BuildConfig
+metadata:
+  name: mathkids-frontend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: frontend
+spec:
+  source:
+    type: Git
+    git:
+      uri: https://github.com/YOUR_ORG/mathkids.git   # ← change this
+      ref: main
+    contextDir: frontend
+  strategy:
+    type: Docker
+    dockerStrategy:
+      dockerfilePath: Dockerfile
+  output:
+    to:
+      kind: ImageStreamTag
+      name: mathkids-frontend:latest
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+---
+# ── Deployment ─────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mathkids-frontend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: mathkids
+      component: frontend
+  template:
+    metadata:
+      labels:
+        app: mathkids
+        component: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: mathkids-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080   # nginx-unprivileged listens on 8080
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+      securityContext:
+        runAsNonRoot: true
+---
+# ── Service ────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: mathkids-frontend
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: frontend
+spec:
+  selector:
+    app: mathkids
+    component: frontend
+  ports:
+    - port: 8080
+      targetPort: 8080
+---
+# ── Route (OpenShift-native ingress with TLS) ──────────────────
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: mathkids
+  namespace: philliphlapa-dev
+  labels:
+    app: mathkids
+    component: frontend
+spec:
+  # host: mathkids.apps.your-cluster.example.com   # leave blank = auto-assigned
+  to:
+    kind: Service
+    name: mathkids-frontend
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge            # TLS terminated at the OpenShift router
+    insecureEdgeTerminationPolicy: Redirect   # HTTP → HTTPS
